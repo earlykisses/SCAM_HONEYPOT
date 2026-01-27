@@ -42,9 +42,12 @@ router.post("/", async (req, res) => {
       agent_reply: reply,
       extracted_data: extracted
     });
-  } catch (err) {
-    res.status(500).json({ error: "LLM failure" });
-  }
+  } 
+  catch (err) {
+  console.error("LLM ERROR:", err.response?.data || err.message);
+  res.status(500).json({ error: "LLM failure" });
+}
+
 });
 
 export default router;

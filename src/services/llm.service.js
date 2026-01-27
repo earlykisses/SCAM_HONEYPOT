@@ -14,8 +14,11 @@ export async function askLLM(systemPrompt, userPrompt) {
     {
       headers: {
         Authorization: `Bearer ${process.env.LLM_API_KEY}`,
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://scam-honeypot.onrender.com",
+        "X-Title": "Scam Honeypot Hackathon"
+      },
+      timeout: 15000
     }
   );
 
