@@ -9,45 +9,77 @@ const router = express.Router();
 
 router.post("/", async (req, res) => {
   try {
-    const { message } = req.body;
+    const {
+      sessionId,
+      message,
+      conversationHistory = [],
+      metadata = {}
+    } = req.body;
 
-    const scam = await detectScam(message);
-
-    if (!scam.is_scam) {
-      return res.json({
-        scam_detected: false,
-        reply: "No scam detected"
+    // ---- BASIC VALIDATION (REQUIRED) ----
+    if (
+      !sessionId ||
+      !message ||
+      !message.sender ||
+      !message.text ||
+      !message.timestamp
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid request format"
       });
     }
 
-    const reply = await respondAsVictim(message);
-    const extracted = extractData(message);
+    const latestText = message.text;
 
-    const confidence_score = calculateConfidence({
-      scamType: scam.scam_type,
+    // ---- SCAM DETECTION ----
+    const scamResult = await detectScam(latestText);
+
+    if (!scamResult.is_scam) {
+      return res.json({
+        status: "success",
+        scamDetected: false
+      });
+    }
+
+    // ---- AGENT RESPONSE (SINGLE TURN FOR NOW) ----
+    const agentReply = await respondAsVictim(latestText);
+
+    // ---- INTELLIGENCE EXTRACTION ----
+    const extracted = extractData(latestText);
+
+    // ---- CONFIDENCE + EXPLANATION (TEMP, WILL CHANGE LATER) ----
+    const confidenceScore = calculateConfidence({
+      scamType: scamResult.scam_type,
       extractedData: extracted,
-      message
+      message: latestText
     });
 
     const explanation = buildExplanation({
-      scamType: scam.scam_type,
+      scamType: scamResult.scam_type,
       extractedData: extracted
     });
 
+    // ---- TEMP RESPONSE (PHASE 1 ONLY) ----
     res.json({
-      scam_detected: true,
-      scam_type: scam.scam_type,
-      confidence_score,
+      status: "success",
+      sessionId,
+      scamDetected: true,
+      agentReply,
+      confidenceScore,
       explanation,
-      agent_reply: reply,
-      extracted_data: extracted
+      extractedData: extracted,
+      metadataReceived: metadata,
+      conversationHistoryLength: conversationHistory.length
     });
-  } 
-  catch (err) {
-  console.error("LLM ERROR:", err.response?.data || err.message);
-  res.status(500).json({ error: "LLM failure" });
-}
 
+  } catch (error) {
+    console.error("PHASE 1 ERROR:", error.message);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error"
+    });
+  }
 });
 
 export default router;
