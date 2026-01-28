@@ -12,7 +12,7 @@ Build an AI-powered agentic honeypot API that detects scam messages, handles mul
 
 Base URL
 
-https://<your-render-app>.onrender.com
+https://scam-honeypot-zpti.onrender.com
 
 ❤️ Health Check
 GET /health
