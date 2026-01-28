@@ -2,12 +2,12 @@ import express from "express";
 import { detectScam } from "../agents/scamDetector.js";
 import { respondAsVictim } from "../agents/personaAgent.js";
 import { extractData } from "../agents/extractor.js";
-import { calculateConfidence } from "../utils/confidence.js";
-import { buildExplanation } from "../utils/explanation.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
+import { sendFinalResultToGuvi } from "../services/guviCallback.service.js";
 
 const router = express.Router();
 
-router.post("/", async (req, res) => {
+router.post("/", apiKeyAuth, async (req, res) => {
   try {
     const {
       sessionId,
@@ -16,7 +16,7 @@ router.post("/", async (req, res) => {
       metadata = {}
     } = req.body;
 
-    // ---- BASIC VALIDATION (REQUIRED) ----
+    // ---- VALIDATION ----
     if (
       !sessionId ||
       !message ||
@@ -32,49 +32,83 @@ router.post("/", async (req, res) => {
 
     const latestText = message.text;
 
-    // ---- SCAM DETECTION ----
-    const scamResult = await detectScam(latestText);
+    // ---- SCAM DETECTION (ONLY ON SCAMMER MESSAGES) ----
+    const scamDetected =
+      message.sender === "scammer"
+        ? (await detectScam(latestText)).is_scam
+        : true;
 
-    if (!scamResult.is_scam) {
+    if (!scamDetected) {
       return res.json({
         status: "success",
         scamDetected: false
       });
     }
 
-    // ---- AGENT RESPONSE (SINGLE TURN FOR NOW) ----
-    const agentReply = await respondAsVictim(latestText);
+    // ---- AGENT RESPONSE (MULTI-TURN) ----
+    const agentReply = await respondAsVictim(
+      latestText,
+      conversationHistory
+    );
 
-    // ---- INTELLIGENCE EXTRACTION ----
-    const extracted = extractData(latestText);
+    // ---- INTELLIGENCE EXTRACTION (FROM ALL MESSAGES) ----
+    const allTexts = [
+      ...conversationHistory.map((m) => m.text),
+      latestText
+    ].join(" ");
 
-    // ---- CONFIDENCE + EXPLANATION (TEMP, WILL CHANGE LATER) ----
-    const confidenceScore = calculateConfidence({
-      scamType: scamResult.scam_type,
-      extractedData: extracted,
-      message: latestText
-    });
+    const extracted = extractData(allTexts);
 
-    const explanation = buildExplanation({
-      scamType: scamResult.scam_type,
-      extractedData: extracted
-    });
+    // ---- ENGAGEMENT METRICS ----
+    const totalMessagesExchanged =
+      conversationHistory.length + 1;
 
-    // ---- TEMP RESPONSE (PHASE 1 ONLY) ----
+    const engagementDurationSeconds =
+      Math.max(
+        0,
+        (new Date(message.timestamp) -
+          new Date(conversationHistory[0]?.timestamp || message.timestamp)) /
+          1000
+      );
+const agentNotes =
+  extracted.suspiciousKeywords.length > 0
+    ? `Scammer used urgency tactics: ${extracted.suspiciousKeywords.join(", ")}`
+    : "Scammer interaction observed with no obvious urgency tactics";
+const guviPayload = {
+  sessionId,
+  scamDetected: true,
+  totalMessagesExchanged,
+  extractedIntelligence: {
+    bankAccounts: extracted.bankAccounts,
+    upiIds: extracted.upiIds,
+    phishingLinks: extracted.phishingLinks,
+    phoneNumbers: extracted.phoneNumbers,
+    suspiciousKeywords: extracted.suspiciousKeywords
+  },
+  agentNotes
+};
+
     res.json({
-      status: "success",
-      sessionId,
-      scamDetected: true,
-      agentReply,
-      confidenceScore,
-      explanation,
-      extractedData: extracted,
-      metadataReceived: metadata,
-      conversationHistoryLength: conversationHistory.length
-    });
+  status: "success",
+  scamDetected: true,
+  engagementMetrics: {
+    engagementDurationSeconds,
+    totalMessagesExchanged
+  },
+  extractedIntelligence: {
+    bankAccounts: extracted.bankAccounts,
+    upiIds: extracted.upiIds,
+    phishingLinks: extracted.phishingLinks,
+    phoneNumbers: extracted.phoneNumbers,
+    suspiciousKeywords: extracted.suspiciousKeywords
+  },
+  agentNotes
+});
+// ---- MANDATORY GUVI CALLBACK (ASYNC, NON-BLOCKING) ----
+sendFinalResultToGuvi(guviPayload);
 
   } catch (error) {
-    console.error("PHASE 1 ERROR:", error.message);
+    console.error("PHASE 3 ERROR:", error.message);
     res.status(500).json({
       status: "error",
       message: "Internal server error"
