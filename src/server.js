@@ -9,37 +9,27 @@ dotenv.config();
 const app = express();
 app.use(cors());
 
-/**
- * ✅ GUVI ENDPOINT TESTER HANDSHAKE
- * This runs BEFORE express.json()
- * Handles empty-body POST with application/json
- */
+// 🔑 GUVI ENDPOINT TESTER HANDSHAKE (STRICT RESPONSE)
 app.post("/api/chat", apiKeyAuth, (req, res, next) => {
   const contentLength = req.headers["content-length"];
 
-  // GUVI tester sends POST with NO body
+  // GUVI tester: POST + headers + NO BODY
   if (!contentLength || contentLength === "0") {
     return res.status(200).json({
-      status: "success",
-      message: "Honeypot endpoint is reachable and secured"
+      status: "success"
     });
   }
 
-  // If body exists → continue to real handler
   next();
 });
 
-/**
- * ✅ JSON parser ONLY after handshake
- */
+// JSON parser AFTER handshake
 app.use(express.json({ strict: false }));
 
-// Health check
+// Health check (not used by GUVI tester)
 app.get("/health", (req, res) => {
   res.status(200).json({
-    status: "ok",
-    service: "Scam Honeypot API",
-    uptime: process.uptime()
+    status: "ok"
   });
 });
 
