@@ -1,3 +1,5 @@
+console.log("BOOT CHECK → Honeypot server version 2026-02-02");
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
