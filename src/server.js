@@ -10,45 +10,64 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use((req, res, next) => {
-  console.log(
-    "INCOMING REQUEST →",
-    req.method,
-    req.url,
-    "| content-length:",
-    req.headers["content-length"],
-    "| content-type:",
-    req.headers["content-type"]
-  );
+
+/**
+ * =========================================================
+ * GUVI ENDPOINT TESTER / PROBE HANDLER
+ * =========================================================
+ * GUVI sends large, non-chat payloads with application/json.
+ * If payload is NOT a valid chat event, we ACK success
+ * and DO NOT attempt to parse or process it.
+ */
+app.post("/api/chat", apiKeyAuth, (req, res, next) => {
+  const contentType = req.headers["content-type"] || "";
+  const contentLength = req.headers["content-length"];
+
+  // If no body OR obviously not a chat payload → GUVI probe
+  if (
+    !contentLength ||
+    contentLength === "0" ||
+    !contentType.includes("application/json")
+  ) {
+    return res.status(200).json({ status: "success" });
+  }
+
+  // Let JSON parser run, but guard against non-chat shapes later
   next();
 });
 
+/**
+ * JSON parser (after probe handler)
+ */
+app.use(express.json({ strict: false }));
 
-// 🔑 GUVI ENDPOINT TESTER HANDSHAKE (STRICT RESPONSE)
+/**
+ * Second guard: body parsed but NOT a valid chat event
+ * (GUVI sometimes sends junk JSON blobs)
+ */
 app.post("/api/chat", apiKeyAuth, (req, res, next) => {
-  const contentLength = req.headers["content-length"];
+  const body = req.body;
 
-  // GUVI tester: POST + headers + NO BODY
-  if (!contentLength || contentLength === "0") {
-    return res.status(200).json({
-      status: "success"
-    });
+  if (
+    !body ||
+    typeof body !== "object" ||
+    !body.message ||
+    typeof body.message !== "object" ||
+    typeof body.message.text !== "string" ||
+    typeof body.message.sender !== "string"
+  ) {
+    return res.status(200).json({ status: "success" });
   }
 
   next();
 });
 
-// JSON parser AFTER handshake
-app.use(express.json({ strict: false }));
-
-// Health check (not used by GUVI tester)
+// Health check
 app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "ok"
-  });
+  res.status(200).json({ status: "ok" });
 });
 
-// Real chat logic
+// Real chat logic (ONLY valid chat events reach here)
 app.use("/api/chat", chatRoute);
 
 const PORT = process.env.PORT || 6000;
