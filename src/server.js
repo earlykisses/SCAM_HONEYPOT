@@ -10,6 +10,19 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use((req, res, next) => {
+  console.log(
+    "INCOMING REQUEST →",
+    req.method,
+    req.url,
+    "| content-length:",
+    req.headers["content-length"],
+    "| content-type:",
+    req.headers["content-type"]
+  );
+  next();
+});
+
 
 // 🔑 GUVI ENDPOINT TESTER HANDSHAKE (STRICT RESPONSE)
 app.post("/api/chat", apiKeyAuth, (req, res, next) => {
