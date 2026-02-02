@@ -9,7 +9,9 @@ const app = express();
 app.use(cors());
 
 // JSON body parser
-app.use(express.json());
+app.use(express.json({
+  strict: false
+}));
 
 // ✅ HANDLE INVALID JSON BODY (documentation / markdown / plain text)
 app.use((err, req, res, next) => {
