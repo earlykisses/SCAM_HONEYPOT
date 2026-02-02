@@ -22,5 +22,12 @@ export async function askLLM(systemPrompt, userPrompt) {
     }
   );
 
-  return response.data.choices[0].message.content;
+  const rawText =
+    response?.data?.choices?.[0]?.message?.content || "";
+
+  // ✅ CRITICAL: strip markdown / code fences defensively
+  return rawText
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
 }
