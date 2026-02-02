@@ -7,7 +7,20 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
+
+// JSON body parser
 app.use(express.json());
+
+// ✅ HANDLE INVALID JSON BODY (documentation / markdown / plain text)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({
+      status: "error",
+      message: "INVALID_REQUEST_BODY: Request body must be valid JSON"
+    });
+  }
+  next();
+});
 
 // Health check
 app.get("/health", (req, res) => {

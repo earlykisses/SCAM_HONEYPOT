@@ -32,7 +32,7 @@ router.post("/", apiKeyAuth, async (req, res) => {
 
     const latestText = message.text;
 
-    // ---- SCAM DETECTION (ONLY ON SCAMMER MESSAGES) ----
+    // ---- SCAM DETECTION ----
     const scamDetected =
       message.sender === "scammer"
         ? (await detectScam(latestText)).is_scam
@@ -45,13 +45,13 @@ router.post("/", apiKeyAuth, async (req, res) => {
       });
     }
 
-    // ---- AGENT RESPONSE (MULTI-TURN) ----
+    // ---- AGENT RESPONSE ----
     const agentReply = await respondAsVictim(
       latestText,
       conversationHistory
     );
 
-    // ---- INTELLIGENCE EXTRACTION (FROM ALL MESSAGES) ----
+    // ---- INTELLIGENCE EXTRACTION ----
     const allTexts = [
       ...conversationHistory.map((m) => m.text),
       latestText
@@ -59,7 +59,7 @@ router.post("/", apiKeyAuth, async (req, res) => {
 
     const extracted = extractData(allTexts);
 
-    // ---- ENGAGEMENT METRICS ----
+    // ---- METRICS ----
     const totalMessagesExchanged =
       conversationHistory.length + 1;
 
@@ -70,42 +70,45 @@ router.post("/", apiKeyAuth, async (req, res) => {
           new Date(conversationHistory[0]?.timestamp || message.timestamp)) /
           1000
       );
-const agentNotes =
-  extracted.suspiciousKeywords.length > 0
-    ? `Scammer used urgency tactics: ${extracted.suspiciousKeywords.join(", ")}`
-    : "Scammer interaction observed with no obvious urgency tactics";
-const guviPayload = {
-  sessionId,
-  scamDetected: true,
-  totalMessagesExchanged,
-  extractedIntelligence: {
-    bankAccounts: extracted.bankAccounts,
-    upiIds: extracted.upiIds,
-    phishingLinks: extracted.phishingLinks,
-    phoneNumbers: extracted.phoneNumbers,
-    suspiciousKeywords: extracted.suspiciousKeywords
-  },
-  agentNotes
-};
 
+    const agentNotes =
+      extracted.suspiciousKeywords.length > 0
+        ? `Scammer used urgency tactics: ${extracted.suspiciousKeywords.join(", ")}`
+        : "Scammer interaction observed with no obvious urgency tactics";
+
+    // ---- RESPONSE TO PLATFORM ----
     res.json({
-  status: "success",
-  scamDetected: true,
-  engagementMetrics: {
-    engagementDurationSeconds,
-    totalMessagesExchanged
-  },
-  extractedIntelligence: {
-    bankAccounts: extracted.bankAccounts,
-    upiIds: extracted.upiIds,
-    phishingLinks: extracted.phishingLinks,
-    phoneNumbers: extracted.phoneNumbers,
-    suspiciousKeywords: extracted.suspiciousKeywords
-  },
-  agentNotes
-});
-// ---- MANDATORY GUVI CALLBACK (ASYNC, NON-BLOCKING) ----
-sendFinalResultToGuvi(guviPayload);
+      status: "success",
+      scamDetected: true,
+      reply: agentReply,
+      engagementMetrics: {
+        totalMessagesExchanged,
+        engagementDurationSeconds
+      },
+      extractedIntelligence: {
+        bankAccounts: extracted.bankAccounts,
+        upiIds: extracted.upiIds,
+        phishingLinks: extracted.phishingLinks,
+        phoneNumbers: extracted.phoneNumbers,
+        suspiciousKeywords: extracted.suspiciousKeywords
+      },
+      agentNotes
+    });
+
+    // ---- MANDATORY GUVI CALLBACK (ASYNC, NON-BLOCKING) ----
+    sendFinalResultToGuvi({
+      sessionId,
+      scamDetected: true,
+      totalMessagesExchanged,
+      extractedIntelligence: {
+        bankAccounts: extracted.bankAccounts,
+        upiIds: extracted.upiIds,
+        phishingLinks: extracted.phishingLinks,
+        phoneNumbers: extracted.phoneNumbers,
+        suspiciousKeywords: extracted.suspiciousKeywords
+      },
+      agentNotes
+    });
 
   } catch (error) {
     console.error("PHASE 3 ERROR:", error.message);
