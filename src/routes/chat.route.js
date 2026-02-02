@@ -9,6 +9,16 @@ const router = express.Router();
 
 router.post("/", apiKeyAuth, async (req, res) => {
   try {
+    // =====================================================
+    // ✅ GUVI ENDPOINT TESTER HANDSHAKE (NO REQUEST BODY)
+    // =====================================================
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(200).json({
+        status: "success",
+        message: "Honeypot endpoint is reachable and secured"
+      });
+    }
+
     const {
       sessionId,
       message,
@@ -16,7 +26,9 @@ router.post("/", apiKeyAuth, async (req, res) => {
       metadata = {}
     } = req.body;
 
-    // ---- VALIDATION ----
+    // =====================================================
+    // ✅ STRICT VALIDATION FOR REAL CHAT REQUESTS
+    // =====================================================
     if (
       !sessionId ||
       !message ||
@@ -32,26 +44,32 @@ router.post("/", apiKeyAuth, async (req, res) => {
 
     const latestText = message.text;
 
-    // ---- SCAM DETECTION ----
+    // =====================================================
+    // ✅ SCAM DETECTION (ONLY WHEN SENDER IS SCAMMER)
+    // =====================================================
     const scamDetected =
       message.sender === "scammer"
         ? (await detectScam(latestText)).is_scam
         : true;
 
     if (!scamDetected) {
-      return res.json({
+      return res.status(200).json({
         status: "success",
         scamDetected: false
       });
     }
 
-    // ---- AGENT RESPONSE ----
+    // =====================================================
+    // ✅ AGENT RESPONSE (MULTI-TURN)
+    // =====================================================
     const agentReply = await respondAsVictim(
       latestText,
       conversationHistory
     );
 
-    // ---- INTELLIGENCE EXTRACTION ----
+    // =====================================================
+    // ✅ INTELLIGENCE EXTRACTION
+    // =====================================================
     const allTexts = [
       ...conversationHistory.map((m) => m.text),
       latestText
@@ -59,25 +77,29 @@ router.post("/", apiKeyAuth, async (req, res) => {
 
     const extracted = extractData(allTexts);
 
-    // ---- METRICS ----
+    // =====================================================
+    // ✅ METRICS
+    // =====================================================
     const totalMessagesExchanged =
       conversationHistory.length + 1;
 
-    const engagementDurationSeconds =
-      Math.max(
-        0,
-        (new Date(message.timestamp) -
-          new Date(conversationHistory[0]?.timestamp || message.timestamp)) /
-          1000
-      );
+    const engagementDurationSeconds = Math.max(
+      0,
+      (new Date(message.timestamp) -
+        new Date(
+          conversationHistory[0]?.timestamp || message.timestamp
+        )) / 1000
+    );
 
     const agentNotes =
       extracted.suspiciousKeywords.length > 0
         ? `Scammer used urgency tactics: ${extracted.suspiciousKeywords.join(", ")}`
         : "Scammer interaction observed with no obvious urgency tactics";
 
-    // ---- RESPONSE TO PLATFORM ----
-    res.json({
+    // =====================================================
+    // ✅ RESPONSE TO PLATFORM
+    // =====================================================
+    res.status(200).json({
       status: "success",
       scamDetected: true,
       reply: agentReply,
@@ -95,7 +117,9 @@ router.post("/", apiKeyAuth, async (req, res) => {
       agentNotes
     });
 
-    // ---- MANDATORY GUVI CALLBACK (ASYNC, NON-BLOCKING) ----
+    // =====================================================
+    // ✅ MANDATORY GUVI FINAL CALLBACK (ASYNC, NON-BLOCKING)
+    // =====================================================
     sendFinalResultToGuvi({
       sessionId,
       scamDetected: true,
