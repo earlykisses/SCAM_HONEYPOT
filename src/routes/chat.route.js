@@ -135,7 +135,10 @@ router.post("/", apiKeyAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error("PHASE 3 ERROR:", error.message);
+    console.error(
+  "PHASE 3 ERROR:",
+  error.response?.data || error.message
+);
     res.status(500).json({
       status: "error",
       message: "Internal server error"
